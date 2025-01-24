@@ -50,6 +50,7 @@ do
     	then
         	echo "Saliendo..."
         	break
+	else
 		echo "Opción incorrecta, prueba de nuevo eligiendo un caracter del menú."
     	fi
 	read
