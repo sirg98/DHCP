@@ -41,32 +41,22 @@ menu() {
 }
 
 seleccionar_instalacion() {
-    echo "===== Selecciona el método de instalación ====="
-    echo "1. Instalar con comandos (en la máquina)"
-    echo "2. Instalar con Ansible"
-    echo "3. Instalar con Docker"
-    read -p "Elige una opción: " metodo
-
+    read -p "Selecciona el método de instalación (docker, ansible, apt): " metodo
     case $metodo in
-        1) instalar_dhcp ;;
-        2) instalar_ansible ;;
-        3) instalar_docker ;;
-        *) echo "Opción inválida";;
+        docker) instalar_docker ;;
+        ansible) instalar_ansible ;;
+        apt) instalar_dhcp ;;
+        *) echo "Opción inválida. Usa docker, ansible o apt." ;;
     esac
 }
 
 seleccionar_desinstalacion() {
-    echo "===== Selecciona el método de desinstalación ====="
-    echo "1. Desinstalar servicio en la máquina"
-    echo "2. Desinstalar Ansible"
-    echo "3. Desinstalar Docker"
-    read -p "Elige una opción: " metodo
-
+    read -p "Selecciona el método de desinstalación (docker, ansible, apt): " metodo
     case $metodo in
-        1) desinstalar_dhcp ;;
-        2) desinstalar_ansible ;;
-        3) desinstalar_docker ;;
-        *) echo "Opción inválida";;
+        docker) desinstalar_docker ;;
+        ansible) desinstalar_ansible ;;
+        apt) desinstalar_dhcp ;;
+        *) echo "Opción inválida. Usa docker, ansible o apt." ;;
     esac
 }
 
@@ -80,72 +70,25 @@ gestionar_servicio() {
     esac
 }
 
-consultar_logs_interactivo() {
-    echo "===== Opciones de logs ====="
-    echo "1. Ver logs recientes"
-    echo "2. Buscar logs por fecha"
-    echo "3. Buscar logs por tipo"
-    echo "4. Ver los últimos N logs"
-    read -p "Elige una opción: " log_opcion
-
-    case $log_opcion in
-        1) consultar_logs --recientes ;;
-        2) 
-            read -p "Introduce la fecha (YYYY-MM-DD): " fecha
-            read -p "Introduce la fecha de fin (opcional, YYYY-MM-DD): " fecha_fin
-            consultar_logs --fecha "$fecha" "$fecha_fin"
-            ;;
-        3) 
-            read -p "Introduce el tipo de log (error, warning, info): " tipo
-            consultar_logs --tipo "$tipo"
-            ;;
-        4)
-            read -p "Introduce el número de líneas que quieres ver: " lineas
-            consultar_logs --ultimos "$lineas"
-            ;;
-        *) echo "Opción inválida";;
-    esac
-}
-
 consultar_logs() {
     case $1 in
-        --recientes)
-            journalctl -u isc-dhcp-server --since "1 hour ago"
-            ;;
-        --fecha)
-            shift
-            fecha=$1
-            fecha_fin=$2
-            if [ -z "$fecha_fin" ]; then
-                journalctl -u isc-dhcp-server --since "$fecha 00:00:00"
-            else
-                journalctl -u isc-dhcp-server --since "$fecha 00:00:00" --until "$fecha_fin 23:59:59"
-            fi
-            ;;
-        --tipo)
-            shift
-            tipo=$1
-            journalctl -u isc-dhcp-server | grep -i "$tipo"
-            ;;
-        --ultimos)
-            shift
-            lineas=$1
-            journalctl -u isc-dhcp-server -n "$lineas"
-            ;;
-        *)
-            echo "Uso: $0 logs {--recientes | --fecha YYYY-MM-DD [YYYY-MM-DD] | --tipo error/warning/info | --ultimos N}"
-            ;;
+        --recientes) journalctl -u isc-dhcp-server --since "1 hour ago" ;;
+        --fecha) shift; journalctl -u isc-dhcp-server --since "$1 00:00:00" --until "$2 23:59:59" ;;
+        --tipo) shift; journalctl -u isc-dhcp-server | grep -i "$1" ;;
+        --ultimos) shift; journalctl -u isc-dhcp-server -n "$1" ;;
+        *) echo "Uso: $0 logs {--recientes | --fecha DD-MM-YYYY [DD-MM-YYYY] | --tipo error/warning/info | --ultimos N}" ;;
     esac
 }
 
 instalar_dhcp() {
     sudo apt update && sudo apt install isc-dhcp-server -y
-    echo "Servicio DHCP instalado correctamente."
+    echo "Servicio DHCP instalado correctamente con APT."
 }
 
 instalar_ansible() {
     sudo apt update && sudo apt install ansible -y
     ansible-playbook -i localhost, ./ansible-dhcp/install_dhcp.yml
+    echo "Servicio DHCP instalado correctamente con Ansible."
 }
 
 instalar_docker() {
@@ -154,6 +97,7 @@ instalar_docker() {
     sudo systemctl enable docker
     docker build -t dhcp-server .
     docker run -d --name dhcp -p 67:67/udp dhcp-server
+    echo "Servicio DHCP instalado correctamente con Docker."
 }
 
 desinstalar_dhcp() {
@@ -169,19 +113,15 @@ desinstalar_ansible() {
 }
 
 desinstalar_docker() {
-    echo "Deteniendo y eliminando contenedor Docker..."
     sudo docker stop dhcp
     sudo docker rm dhcp
-    echo "Eliminando imagen Docker..."
     sudo docker rmi dhcp-server
-    echo "Desinstalando Docker..."
     sudo apt remove --purge -y docker.io
     sudo apt autoremove -y
     echo "Docker ha sido desinstalado correctamente."
 }
 
 configurar_dhcp() {
-    echo "Configurando DHCP..."
     read -p "Introduce la subred: " subred
     read -p "Introduce la máscara de subred: " mascara
     read -p "Introduce el rango inicial: " rango_inicio
@@ -208,12 +148,28 @@ mostrar_info
 
 if [ $# -gt 0 ]; then
     case $1 in
-        instalar_dhcp) instalar_dhcp ;;
-        desinstalar_dhcp) desinstalar_dhcp ;;
-        servicio) shift; gestionar_servicio "$@" ;;
-        logs) shift; consultar_logs "$@" ;;
-        configurar_dhcp) configurar_dhcp ;;
-        *) echo "Uso: $0 {instalar_dhcp | desinstalar_dhcp | servicio start|stop|restart|status | logs --recientes|--fecha YYYY-MM-DD|--tipo error|--ultimos N | configurar_dhcp}" ;;
+        instalar)
+            shift
+            seleccionar_instalacion "$@"
+            ;;
+        desinstalar)
+            shift
+            seleccionar_desinstalacion "$@"
+            ;;
+        servicio)
+            shift
+            gestionar_servicio "$@"
+            ;;
+        logs)
+            shift
+            consultar_logs "$@"
+            ;;
+        configurar_dhcp)
+            configurar_dhcp
+            ;;
+        *)
+            echo "Uso: $0 {instalar [docker|ansible|apt] | desinstalar [docker|ansible|apt] | servicio start|stop|restart|status | logs --recientes|--fecha YYYY-MM-DD|--tipo error|--ultimos N | configurar_dhcp}"
+            ;;
     esac
     exit 0
 fi
