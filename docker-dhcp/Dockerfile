@@ -1,7 +1,10 @@
-FROM ubuntu:20.04
+FROM ubuntu:22.04
 
-RUN apt update && apt install -y isc-dhcp-server
+# Eliminar completamente las referencias a security.ubuntu.com
+RUN sed -i '/security.ubuntu.com/d' /etc/apt/sources.list && \
+    apt update && \
+    apt install isc-dhcp-server -y
 
 COPY dhcpd.conf /etc/dhcp/dhcpd.conf
-
-CMD ["/usr/sbin/dhcpd", "-f"]
+EXPOSE 67/udp
+CMD ["/usr/sbin/dhcpd", "-f", "-d"]
