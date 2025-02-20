@@ -1,58 +1,144 @@
 #!/bin/bash
 
-while true
-do
-    # Menú de opciones
-    echo "---------- Servidor DHCP ---------"
-    echo "1.- Actualizar sistema"
-    echo "2.- Instalar DHCP"
-    echo "3.- Desinstalar DHCP"
-    echo "4.- Reiniciar DHCP"
-    echo "5.- Estado del servicio DHCP"
-    echo "6.- Configurar DHCP"
-    echo "7.- Configurar Netplan"
-    echo "8.- Corregir permisos de Netplan"
-    echo "9.- Ayuda (--help)"
-    echo "10.- Salir"
-    echo "---------------------------------"
+mostrar_info() {
+    echo "========== Información del sistema =========="
+    echo "🔹 Dirección IP: $(hostname -I)"
+    echo "🔹 Interfaz de red: $(ip -o -4 route show default | awk '{print $5}')"
+    echo "🔹 Estado del servicio DHCP: $(systemctl is-active isc-dhcp-server)"
+    echo "============================================="
+}
 
-    read -r -p "¿Qué necesitas?: " opcion
+menu() {
+    while true; do
+        echo "========== Menú de Gestión DHCP =========="
+        echo "1. Instalar servicio"
+        echo "2. Desinstalar servicio"
+        echo "3. Arrancar servicio"
+        echo "4. Detener servicio"
+        echo "5. Reiniciar servicio"
+        echo "6. Consultar logs"
+        echo "7. Configurar DHCP"
+        echo "8. Configurar Netplan"
+        echo "9. Editar configuración DHCP"
+        echo "10. Salir"
+        echo "=========================================="
+        read -p "Selecciona una opción: " opcion
 
-    if [ "$opcion" -eq 1 ]; then # Actualizar sistema
-        sudo apt update --help
-        sudo apt update -y
-        sudo apt upgrade --help
-        sudo apt upgrade -y
-        echo "El sistema se ha actualizado correctamente."
+        case $opcion in
+            1) seleccionar_instalacion ;;
+            2) seleccionar_desinstalacion ;;
+            3) sudo systemctl start isc-dhcp-server ;;
+            4) sudo systemctl stop isc-dhcp-server ;;
+            5) sudo systemctl restart isc-dhcp-server ;;
+            6) consultar_logs ;;
+            7) configurar_dhcp ;;
+            8) configurar_netplan ;;
+            9) sudo nano /etc/dhcp/dhcpd.conf ;;
+            10) exit ;;
+            *) echo "Opción inválida";;
+        esac
+    done
+}
 
-    elif [ "$opcion" -eq 2 ]; then # Instalar DHCP
-        sudo apt install isc-dhcp-server -y
-        sudo systemctl status isc-dhcp-server
-        echo "El servicio DHCP se ha instalado correctamente."
+seleccionar_instalacion() {
+    echo "===== Selecciona el método de instalación ====="
+    echo "1. Instalar con comandos (en la máquina)"
+    echo "2. Instalar con Ansible"
+    echo "3. Instalar con Docker"
+    read -p "Elige una opción: " metodo
 
-    elif [ "$opcion" -eq 3 ]; then # Desinstalar
-        sudo apt remove isc-dhcp-server -y
-        sudo apt purge isc-dhcp-server -y
-        echo "Se ha desinstalado correctamente."
+    case $metodo in
+        1) instalar_dhcp ;;
+        2) instalar_ansible ;;
+        3) instalar_docker ;;
+        *) echo "Opción inválida";;
+    esac
+}
 
-    elif [ "$opcion" -eq 4 ]; then # Reiniciar DHCP
-        sudo systemctl restart isc-dhcp-server
-        echo "El servicio DHCP se ha reiniciado correctamente."
-        sudo systemctl status isc-dhcp-server
+seleccionar_desinstalacion() {
+    echo "===== Selecciona el método de desinstalación ====="
+    echo "1. Desinstalar servicio en la máquina"
+    echo "2. Desinstalar Ansible"
+    echo "3. Desinstalar Docker"
+    read -p "Elige una opción: " metodo
 
-    elif [ "$opcion" -eq 5 ]; then # Estado del servicio
-        sudo systemctl status isc-dhcp-server
+    case $metodo in
+        1) desinstalar_dhcp ;;
+        2) desinstalar_ansible ;;
+        3) desinstalar_docker ;;
+        *) echo "Opción inválida";;
+    esac
+}
 
-    elif [ "$opcion" -eq 6 ]; then # Configuración DHCP
-        echo "Configurando DHCP..."
-        read -r -p "Introduce la subred (ejemplo: 192.168.1.0): " subred
-        read -r -p "Introduce la máscara de subred (ejemplo: 255.255.255.0): " mascara
-        read -r -p "Introduce el rango de IPs inicial (ejemplo: 192.168.1.100): " rango_inicio
-        read -r -p "Introduce el rango de IPs final (ejemplo: 192.168.1.200): " rango_fin
-        read -r -p "Introduce la puerta de enlace (ejemplo: 192.168.1.1): " puerta_enlace
-        read -r -p "Introduce el servidor DNS preferido (ejemplo: 8.8.8.8): " dns
+instalar_dhcp() {
+    sudo apt update && sudo apt install isc-dhcp-server -y
+    echo "Servicio DHCP instalado correctamente."
+}
 
-        sudo bash -c "cat > /etc/dhcp/dhcpd.conf" <<EOL
+instalar_ansible() {
+    sudo apt update && sudo apt install ansible -y
+    ansible-playbook -i localhost, ./ansible-dhcp/install_dhcp.yml
+}
+
+instalar_docker() {
+    sudo apt update && sudo apt install -y docker.io
+    sudo systemctl start docker
+    sudo systemctl enable docker
+    docker build -t dhcp-server .
+    docker run -d --name dhcp -p 67:67/udp dhcp-server
+}
+
+desinstalar_dhcp() {
+    sudo apt remove isc-dhcp-server -y
+    sudo apt purge isc-dhcp-server -y
+    echo "Servicio DHCP desinstalado."
+}
+
+desinstalar_ansible() {
+    sudo apt remove --purge ansible -y
+    sudo apt autoremove -y
+    echo "Ansible ha sido desinstalado correctamente."
+}
+
+desinstalar_docker() {
+    echo "Deteniendo y eliminando contenedor Docker..."
+    sudo docker stop dhcp
+    sudo docker rm dhcp
+    echo "Eliminando imagen Docker..."
+    sudo docker rmi dhcp-server
+    echo "Desinstalando Docker..."
+    sudo apt remove --purge -y docker.io
+    sudo apt autoremove -y
+    echo "Docker ha sido desinstalado correctamente."
+}
+
+consultar_logs() {
+    echo "===== Opciones de logs ====="
+    echo "1. Ver logs recientes"
+    echo "2. Buscar logs por fecha"
+    echo "3. Buscar logs por tipo"
+    read -p "Elige una opción: " log_opcion
+
+    case $log_opcion in
+        1) journalctl -u isc-dhcp-server --since "1 hour ago" ;;
+        2) read -p "Introduce la fecha (DD-MM-YYYY): " fecha
+           journalctl -u isc-dhcp-server --since "$fecha 00:00:00" --until "$fecha 23:59:59" ;;
+        3) read -p "Introduce el tipo de log (error, warning, info): " tipo
+           journalctl -u isc-dhcp-server | grep -i "$tipo" ;;
+        *) echo "Opción inválida";;
+    esac
+}
+
+configurar_dhcp() {
+    echo "Configurando DHCP..."
+    read -p "Introduce la subred (ejemplo: 192.168.1.0): " subred
+    read -p "Introduce la máscara de subred (ejemplo: 255.255.255.0): " mascara
+    read -p "Introduce el rango de IPs inicial (ejemplo: 192.168.1.100): " rango_inicio
+    read -p "Introduce el rango de IPs final (ejemplo: 192.168.1.200): " rango_fin
+    read -p "Introduce la puerta de enlace (ejemplo: 192.168.1.1): " puerta_enlace
+    read -p "Introduce el servidor DNS (ejemplo: 8.8.8.8): " dns
+
+    sudo bash -c "cat > /etc/dhcp/dhcpd.conf" <<EOL
 default-lease-time 600;
 max-lease-time 7200;
 
@@ -63,21 +149,22 @@ subnet $subred netmask $mascara {
 }
 EOL
 
-        echo "Configuración actualizada. Reiniciando servicio..."
-        sudo systemctl restart isc-dhcp-server
-        sudo systemctl status isc-dhcp-server
+    echo "Configuración actualizada. Reiniciando servicio..."
+    sudo systemctl restart isc-dhcp-server
+    sudo systemctl status isc-dhcp-server
+}
 
-    elif [ "$opcion" -eq 7 ]; then # Configurar Netplan
-        echo "Configurando Netplan..."
-        read -r -p "Introduce la interfaz de red (ejemplo: enp0s3, eth0): " interfaz
-        read -r -p "¿Quieres una IP estática o dinámica? (escribe 'estatica' o 'dhcp'): " tipo_ip
+configurar_netplan() {
+    echo "Configurando Netplan..."
+    read -p "Introduce la interfaz de red (ejemplo: enp0s3, eth0): " interfaz
+    read -p "¿Quieres una IP estática o dinámica? (escribe 'estática' o 'dhcp'): " tipo_ip
 
-        if [ "$tipo_ip" == "estatica" ]; then
-            read -r -p "Introduce la IP estática (ejemplo: 192.168.1.10/24): " ip_estatica
-            read -r -p "Introduce la puerta de enlace (ejemplo: 192.168.1.1): " puerta_enlace
-            read -r -p "Introduce el servidor DNS (ejemplo: 8.8.8.8): " dns
+    if [ "$tipo_ip" == "estática" ]; then
+        read -p "Introduce la IP estática (ejemplo: 192.168.1.10/24): " ip_estatica
+        read -p "Introduce la puerta de enlace (ejemplo: 192.168.1.1): " puerta_enlace
+        read -p "Introduce el servidor DNS (ejemplo: 8.8.8.8): " dns
 
-            sudo bash -c "cat > /etc/netplan/01-netplan.yaml" <<EOL
+        sudo bash -c "cat > /etc/netplan/01-netplan.yaml" <<EOL
 network:
   version: 2
   ethernets:
@@ -91,53 +178,24 @@ network:
         addresses:
           - $dns
 EOL
-        elif [ "$tipo_ip" == "dhcp" ]; then
-            sudo bash -c "cat > /etc/netplan/01-netplan.yaml" <<EOL
+    elif [ "$tipo_ip" == "dhcp" ]; then
+        sudo bash -c "cat > /etc/netplan/01-netplan.yaml" <<EOL
 network:
   version: 2
   ethernets:
     $interfaz:
       dhcp4: true
 EOL
-        else
-            echo "Opción inválida, por favor elige 'estatica' o 'dhcp'."
-            continue
-        fi
-
-        echo "Aplicando configuración..."
-        sudo netplan apply
-        echo "Netplan configurado correctamente."
-
-    elif [ "$opcion" -eq 8 ]; then # Corregir permisos de Netplan
-        echo "Corrigiendo permisos en Netplan..."
-        sudo chown root:root /etc/netplan/01-netplan.yaml
-        sudo chmod 600 /etc/netplan/01-netplan.yaml
-        sudo netplan apply
-        echo "Permisos corregidos y Netplan aplicado correctamente."
-
-    elif [ "$opcion" -eq 9 ]; then # Ayuda (--help)
-        echo "Uso del programa:"
-        echo "Este script permite instalar, configurar y gestionar un servidor DHCP en Ubuntu."
-        echo ""
-        echo "Opciones del menú:"
-        echo "  1. Actualizar sistema - Ejecuta 'apt update' y 'apt upgrade'."
-        echo "  2. Instalar DHCP - Instala el servicio DHCP."
-        echo "  3. Desinstalar DHCP - Elimina el servidor DHCP."
-        echo "  4. Reiniciar DHCP - Reinicia el servicio DHCP."
-        echo "  5. Estado del servicio DHCP - Muestra el estado del servicio DHCP."
-        echo "  6. Configurar DHCP - Permite definir los parámetros para la red."
-        echo "  7. Configurar Netplan - Configura la red."
-        echo "  8. Corregir permisos de Netplan - Ajusta permisos."
-        echo "  9. Ayuda - Muestra este mensaje."
-        echo "  10. Salir - Sale del programa."
-
-    elif [ "$opcion" -eq 10 ]; then # Salir
-        echo "Saliendo..."
-        break
-
     else
-        echo "Opción incorrecta, prueba de nuevo eligiendo un número del menú."
+        echo "Opción inválida, por favor elige 'estática' o 'dhcp'."
+        return
     fi
 
-    read -r -p "Presiona Enter para continuar..."
-done
+    echo "Aplicando configuración..."
+    sudo netplan apply
+    echo "Netplan configurado correctamente."
+}
+
+mostrar_info
+menu
+

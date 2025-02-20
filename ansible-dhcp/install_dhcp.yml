@@ -1,0 +1,40 @@
+---
+- name: Instalación y configuración de DHCP
+  hosts: localhost
+  connection: local
+  become: yes
+  vars:
+    subnet: "192.168.1.0"
+    netmask: "255.255.255.0"
+    range_start: "192.168.1.100"
+    range_end: "192.168.1.200"
+    gateway: "192.168.1.1"
+    dns: "8.8.8.8"
+  tasks:
+    - name: Actualizar paquetes del sistema
+      apt:
+        update_cache: yes
+
+    - name: Instalar el servidor DHCP
+      apt:
+        name: isc-dhcp-server
+        state: present
+
+    - name: Configurar el archivo DHCP
+      template:
+        src: templates/dhcpd.conf.j2
+        dest: /etc/dhcp/dhcpd.conf
+      notify: Reiniciar DHCP
+
+    - name: Habilitar y arrancar el servicio DHCP
+      systemd:
+        name: isc-dhcp-server
+        enabled: yes
+        state: started
+
+  handlers:
+    - name: Reiniciar DHCP
+      systemd:
+        name: isc-dhcp-server
+        state: restarted
+
