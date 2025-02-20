@@ -13,61 +13,93 @@ menu() {
         echo "========== Menú de Gestión DHCP =========="
         echo "1. Instalar servicio"
         echo "2. Desinstalar servicio"
-        echo "3. Arrancar servicio"
-        echo "4. Detener servicio"
-        echo "5. Reiniciar servicio"
-        echo "6. Consultar logs"
-        echo "7. Configurar DHCP"
-        echo "8. Configurar Netplan"
-        echo "9. Editar configuración DHCP"
-        echo "10. Salir"
+        echo "3. Mostrar estado del servicio"
+        echo "4. Arrancar servicio"
+        echo "5. Detener servicio"
+        echo "6. Reiniciar servicio"
+        echo "7. Consultar logs"
+        echo "8. Configurar DHCP"
+        echo "9. Configurar Netplan"
+        echo "10. Editar configuración DHCP"
+        echo "11. Salir"
         echo "=========================================="
         read -p "Selecciona una opción: " opcion
 
         case $opcion in
             1) seleccionar_instalacion ;;
             2) seleccionar_desinstalacion ;;
-            3) gestionar_servicio start ;;
-            4) gestionar_servicio stop ;;
-            5) gestionar_servicio restart ;;
-            6) consultar_logs_interactivo ;;
-            7) configurar_dhcp ;;
-            8) configurar_netplan ;;
-            9) sudo nano /etc/dhcp/dhcpd.conf ;;
-            10) exit ;;
+            3) gestionar_servicio estado ;;
+            4) gestionar_servicio activar ;;
+            5) gestionar_servicio apagar ;;
+            6) gestionar_servicio reiniciar ;;
+            7) consultar_logs_interactivo ;;
+            8) configurar_dhcp ;;
+            9) configurar_netplan ;;
+            10) sudo nano /etc/dhcp/dhcpd.conf ;;
+            11) exit ;;
             *) echo "Opción inválida";;
         esac
     done
 }
 
 seleccionar_instalacion() {
-    read -p "Selecciona el método de instalación (docker, ansible, apt): " metodo
+    echo "1. Instalar en docker"
+    echo "2. Instalar en ansible"
+    echo "3. Instalar en apt"
+    read -p "Selecciona el método de instalación: " metodo
     case $metodo in
-        docker) instalar_docker ;;
-        ansible) instalar_ansible ;;
-        apt) instalar_dhcp ;;
+        1) instalar_docker ;;
+        2) instalar_ansible ;;
+        3) instalar_dhcp ;;
         *) echo "Opción inválida. Usa docker, ansible o apt." ;;
     esac
 }
 
 seleccionar_desinstalacion() {
-    read -p "Selecciona el método de desinstalación (docker, ansible, apt): " metodo
+    
+    echo "1. Desinistalar en docker"
+    echo "2. Desinstalar en ansible"
+    echo "3. Desinstalar en apt"
+    read -p "Selecciona el método de desinstalación: " metodo
     case $metodo in
-        docker) desinstalar_docker ;;
-        ansible) desinstalar_ansible ;;
-        apt) desinstalar_dhcp ;;
+        1) desinstalar_docker ;;
+        2) desinstalar_ansible ;;
+        3) desinstalar_dhcp ;;
         *) echo "Opción inválida. Usa docker, ansible o apt." ;;
     esac
 }
 
 gestionar_servicio() {
     case $1 in
-        start) sudo systemctl start isc-dhcp-server ;;
-        stop) sudo systemctl stop isc-dhcp-server ;;
-        restart) sudo systemctl restart isc-dhcp-server ;;
-        status) systemctl status isc-dhcp-server ;;
-        *) echo "Uso: $0 servicio {start|stop|restart|status}" ;;
+        activar) 
+            echo "▶ Iniciando el servicio DHCP..."
+            sudo systemctl start isc-dhcp-server
+            sleep 1  
+            echo "Servicio DHCP iniciado."
+            ;;
+        apagar) 
+            echo "Apagando el servicio DHCP..."
+            sudo systemctl stop isc-dhcp-server
+            sleep 1
+            echo "Servicio DHCP detenido."
+            ;;
+        reiniciar) 
+            echo "Reiniciando el servicio DHCP..."
+            sudo systemctl restart isc-dhcp-server
+            sleep 1
+            echo "Servicio DHCP reiniciado."
+            ;;
+        estado) 
+            echo "Estado actual del servicio DHCP:"
+            systemctl status isc-dhcp-server --no-pager
+            ;;
+        *) 
+            echo "Uso incorrecto: $0 {start|stop|restart|status}"
+            ;;
     esac
+
+    echo "Estado actual:"
+    systemctl is-active isc-dhcp-server && echo "DHCP está activo." || echo "DHCP está inactivo."
 }
 
 consultar_logs() {
