@@ -27,10 +27,10 @@ menu() {
         case $opcion in
             1) seleccionar_instalacion ;;
             2) seleccionar_desinstalacion ;;
-            3) sudo systemctl start isc-dhcp-server ;;
-            4) sudo systemctl stop isc-dhcp-server ;;
-            5) sudo systemctl restart isc-dhcp-server ;;
-            6) consultar_logs ;;
+            3) gestionar_servicio start ;;
+            4) gestionar_servicio stop ;;
+            5) gestionar_servicio restart ;;
+            6) consultar_logs_interactivo ;;
             7) configurar_dhcp ;;
             8) configurar_netplan ;;
             9) sudo nano /etc/dhcp/dhcpd.conf ;;
@@ -67,6 +67,74 @@ seleccionar_desinstalacion() {
         2) desinstalar_ansible ;;
         3) desinstalar_docker ;;
         *) echo "Opción inválida";;
+    esac
+}
+
+gestionar_servicio() {
+    case $1 in
+        start) sudo systemctl start isc-dhcp-server ;;
+        stop) sudo systemctl stop isc-dhcp-server ;;
+        restart) sudo systemctl restart isc-dhcp-server ;;
+        status) systemctl status isc-dhcp-server ;;
+        *) echo "Uso: $0 servicio {start|stop|restart|status}" ;;
+    esac
+}
+
+consultar_logs_interactivo() {
+    echo "===== Opciones de logs ====="
+    echo "1. Ver logs recientes"
+    echo "2. Buscar logs por fecha"
+    echo "3. Buscar logs por tipo"
+    echo "4. Ver los últimos N logs"
+    read -p "Elige una opción: " log_opcion
+
+    case $log_opcion in
+        1) consultar_logs --recientes ;;
+        2) 
+            read -p "Introduce la fecha (YYYY-MM-DD): " fecha
+            read -p "Introduce la fecha de fin (opcional, YYYY-MM-DD): " fecha_fin
+            consultar_logs --fecha "$fecha" "$fecha_fin"
+            ;;
+        3) 
+            read -p "Introduce el tipo de log (error, warning, info): " tipo
+            consultar_logs --tipo "$tipo"
+            ;;
+        4)
+            read -p "Introduce el número de líneas que quieres ver: " lineas
+            consultar_logs --ultimos "$lineas"
+            ;;
+        *) echo "Opción inválida";;
+    esac
+}
+
+consultar_logs() {
+    case $1 in
+        --recientes)
+            journalctl -u isc-dhcp-server --since "1 hour ago"
+            ;;
+        --fecha)
+            shift
+            fecha=$1
+            fecha_fin=$2
+            if [ -z "$fecha_fin" ]; then
+                journalctl -u isc-dhcp-server --since "$fecha 00:00:00"
+            else
+                journalctl -u isc-dhcp-server --since "$fecha 00:00:00" --until "$fecha_fin 23:59:59"
+            fi
+            ;;
+        --tipo)
+            shift
+            tipo=$1
+            journalctl -u isc-dhcp-server | grep -i "$tipo"
+            ;;
+        --ultimos)
+            shift
+            lineas=$1
+            journalctl -u isc-dhcp-server -n "$lineas"
+            ;;
+        *)
+            echo "Uso: $0 logs {--recientes | --fecha YYYY-MM-DD [YYYY-MM-DD] | --tipo error/warning/info | --ultimos N}"
+            ;;
     esac
 }
 
@@ -112,31 +180,14 @@ desinstalar_docker() {
     echo "Docker ha sido desinstalado correctamente."
 }
 
-consultar_logs() {
-    echo "===== Opciones de logs ====="
-    echo "1. Ver logs recientes"
-    echo "2. Buscar logs por fecha"
-    echo "3. Buscar logs por tipo"
-    read -p "Elige una opción: " log_opcion
-
-    case $log_opcion in
-        1) journalctl -u isc-dhcp-server --since "1 hour ago" ;;
-        2) read -p "Introduce la fecha (DD-MM-YYYY): " fecha
-           journalctl -u isc-dhcp-server --since "$fecha 00:00:00" --until "$fecha 23:59:59" ;;
-        3) read -p "Introduce el tipo de log (error, warning, info): " tipo
-           journalctl -u isc-dhcp-server | grep -i "$tipo" ;;
-        *) echo "Opción inválida";;
-    esac
-}
-
 configurar_dhcp() {
     echo "Configurando DHCP..."
-    read -p "Introduce la subred (ejemplo: 192.168.1.0): " subred
-    read -p "Introduce la máscara de subred (ejemplo: 255.255.255.0): " mascara
-    read -p "Introduce el rango de IPs inicial (ejemplo: 192.168.1.100): " rango_inicio
-    read -p "Introduce el rango de IPs final (ejemplo: 192.168.1.200): " rango_fin
-    read -p "Introduce la puerta de enlace (ejemplo: 192.168.1.1): " puerta_enlace
-    read -p "Introduce el servidor DNS (ejemplo: 8.8.8.8): " dns
+    read -p "Introduce la subred: " subred
+    read -p "Introduce la máscara de subred: " mascara
+    read -p "Introduce el rango inicial: " rango_inicio
+    read -p "Introduce el rango final: " rango_fin
+    read -p "Introduce la puerta de enlace: " puerta_enlace
+    read -p "Introduce el servidor DNS: " dns
 
     sudo bash -c "cat > /etc/dhcp/dhcpd.conf" <<EOL
 default-lease-time 600;
@@ -151,51 +202,20 @@ EOL
 
     echo "Configuración actualizada. Reiniciando servicio..."
     sudo systemctl restart isc-dhcp-server
-    sudo systemctl status isc-dhcp-server
-}
-
-configurar_netplan() {
-    echo "Configurando Netplan..."
-    read -p "Introduce la interfaz de red (ejemplo: enp0s3, eth0): " interfaz
-    read -p "¿Quieres una IP estática o dinámica? (escribe 'estática' o 'dhcp'): " tipo_ip
-
-    if [ "$tipo_ip" == "estática" ]; then
-        read -p "Introduce la IP estática (ejemplo: 192.168.1.10/24): " ip_estatica
-        read -p "Introduce la puerta de enlace (ejemplo: 192.168.1.1): " puerta_enlace
-        read -p "Introduce el servidor DNS (ejemplo: 8.8.8.8): " dns
-
-        sudo bash -c "cat > /etc/netplan/01-netplan.yaml" <<EOL
-network:
-  version: 2
-  ethernets:
-    $interfaz:
-      addresses:
-        - $ip_estatica
-      routes:
-        - to: default
-          via: $puerta_enlace
-      nameservers:
-        addresses:
-          - $dns
-EOL
-    elif [ "$tipo_ip" == "dhcp" ]; then
-        sudo bash -c "cat > /etc/netplan/01-netplan.yaml" <<EOL
-network:
-  version: 2
-  ethernets:
-    $interfaz:
-      dhcp4: true
-EOL
-    else
-        echo "Opción inválida, por favor elige 'estática' o 'dhcp'."
-        return
-    fi
-
-    echo "Aplicando configuración..."
-    sudo netplan apply
-    echo "Netplan configurado correctamente."
 }
 
 mostrar_info
-menu
 
+if [ $# -gt 0 ]; then
+    case $1 in
+        instalar_dhcp) instalar_dhcp ;;
+        desinstalar_dhcp) desinstalar_dhcp ;;
+        servicio) shift; gestionar_servicio "$@" ;;
+        logs) shift; consultar_logs "$@" ;;
+        configurar_dhcp) configurar_dhcp ;;
+        *) echo "Uso: $0 {instalar_dhcp | desinstalar_dhcp | servicio start|stop|restart|status | logs --recientes|--fecha YYYY-MM-DD|--tipo error|--ultimos N | configurar_dhcp}" ;;
+    esac
+    exit 0
+fi
+
+menu
