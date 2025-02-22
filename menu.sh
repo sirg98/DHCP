@@ -1,15 +1,12 @@
 #!/bin/bash
 
-mostrar_info() {
-    echo "========== Información del sistema =========="
-    echo "🔹 Dirección IP: $(hostname -I)"
-    echo "🔹 Interfaz de red: $(ip -o -4 route show default | awk '{print $5}')"
-    echo "🔹 Estado del servicio DHCP: $(systemctl is-active isc-dhcp-server)"
-    echo "============================================="
-}
-
 menu() {
     while true; do
+    	echo "========== Información del sistema =========="
+    	echo "Dirección IP: $(hostname -I)"
+    	echo "Interfaz de red: $(ip -o -4 route show default | cut -d' ' -f5)"
+    	echo "Estado del servicio DHCP: $(systemctl is-active isc-dhcp-server)"
+    	echo "============================================="
         echo "========== Menú de Gestión DHCP =========="
         echo "1. Instalar servicio"
         echo "2. Desinstalar servicio"
@@ -20,14 +17,14 @@ menu() {
         echo "7. Consultar logs"
         echo "8. Configurar DHCP"
         echo "9. Configurar Netplan"
-        echo "10. Editar configuración DHCP"
+        echo "10. Permisos NetPlan"
         echo "11. Salir"
         echo "=========================================="
         read -p "Selecciona una opción: " opcion
 
         case $opcion in
-            1) seleccionar_instalacion ;;
-            2) seleccionar_desinstalacion ;;
+            1) seleccionar_instalacion_menu ;;
+            2) seleccionar_desinstalacion_menu ;;
             3) gestionar_servicio estado ;;
             4) gestionar_servicio activar ;;
             5) gestionar_servicio apagar ;;
@@ -35,44 +32,68 @@ menu() {
             7) consultar_logs_interactivo ;;
             8) configurar_dhcp ;;
             9) configurar_netplan ;;
-            10) sudo nano /etc/dhcp/dhcpd.conf ;;
+            10) sudo chmod 644 /etc/netplan/*.yaml && echo "Permisos aplicados correctamente"  ;;
             11) exit ;;
             *) echo "Opción inválida";;
         esac
     done
 }
 
-seleccionar_instalacion() {
+seleccionar_instalacion_menu() {
+    echo "======================="
     echo "1. Instalar en docker"
     echo "2. Instalar en ansible"
     echo "3. Instalar en apt"
+    echo "======================="
     read -p "Selecciona el método de instalación: " metodo
     case $metodo in
         1) instalar_docker ;;
         2) instalar_ansible ;;
         3) instalar_dhcp ;;
-        *) echo "Opción inválida. Usa docker, ansible o apt." ;;
+        *) echo "Opción inválida. Selecciona 1, 2 o 3." ;;
     esac
 }
 
-seleccionar_desinstalacion() {
-    
-    echo "1. Desinistalar en docker"
+seleccionar_instalacion() {
+    case $1 in
+        docker) instalar_docker ;;
+        ansible) instalar_ansible ;;
+        apt) instalar_dhcp ;;
+        "") seleccionar_instalacion_menu ;; 
+        *) echo "Método inválido. Usa docker, ansible o apt." ;;
+    esac
+}
+
+seleccionar_desinstalacion_menu() {
+    echo "======================="
+    echo "1. Desinstalar en docker"
     echo "2. Desinstalar en ansible"
     echo "3. Desinstalar en apt"
+    echo "======================="
     read -p "Selecciona el método de desinstalación: " metodo
+    
     case $metodo in
         1) desinstalar_docker ;;
         2) desinstalar_ansible ;;
         3) desinstalar_dhcp ;;
-        *) echo "Opción inválida. Usa docker, ansible o apt." ;;
+        *) echo "Opción inválida. Selecciona 1, 2 o 3." ;;
+    esac
+}
+
+seleccionar_desinstalacion() {
+    case $1 in
+        docker) desinstalar_docker ;;
+        ansible) desinstalar_ansible ;;
+        apt) desinstalar_dhcp ;;
+        "") seleccionar_desinstalacion_menu ;; # Si no hay parámetro, muestra el menu
+        *) echo "Método inválido. Usa docker, ansible o apt." ;;
     esac
 }
 
 gestionar_servicio() {
     case $1 in
         activar) 
-            echo "▶ Iniciando el servicio DHCP..."
+            echo "Iniciando el servicio DHCP..."
             sudo systemctl start isc-dhcp-server
             sleep 1  
             echo "Servicio DHCP iniciado."
@@ -94,7 +115,7 @@ gestionar_servicio() {
             systemctl status isc-dhcp-server --no-pager
             ;;
         *) 
-            echo "Uso incorrecto: $0 {start|stop|restart|status}"
+            echo "Uso incorrecto: $0 {activar|apagar|reiniciar|estado}"
             ;;
     esac
 
@@ -102,13 +123,80 @@ gestionar_servicio() {
     systemctl is-active isc-dhcp-server && echo "DHCP está activo." || echo "DHCP está inactivo."
 }
 
+consultar_logs_interactivo() {
+    echo "======================="
+    echo "Opciones de logs:"
+    echo "1. Logs recientes (última hora)"
+    echo "2. Logs por fecha"
+    echo "3. Logs por tipo (error/warning/info)"
+    echo "4. Últimos N logs"
+    echo "======================="
+    read -p "Selecciona una opción: " opcion_log
+
+    case $opcion_log in
+        1) 
+            echo "Mostrando logs recientes del servicio DHCP..."
+            journalctl -u isc-dhcp-server --since "1 hour ago"
+            ;;
+        2)
+            read -p "Fecha inicio (YYYY-MM-DD): " fecha_inicio
+            read -p "Fecha fin (YYYY-MM-DD) [opcional]: " fecha_fin
+            if [ -z "$fecha_fin" ]; then
+                echo "Mostrando logs desde $fecha_inicio..."
+                journalctl -u isc-dhcp-server --since "$fecha_inicio 00:00:00"
+            else
+                echo "Mostrando logs entre $fecha_inicio y $fecha_fin..."
+                journalctl -u isc-dhcp-server --since "$fecha_inicio 00:00:00" --until "$fecha_fin 23:59:59"
+            fi
+            ;;
+        3)
+            read -p "Tipo (error/warning/info): " tipo_log
+            echo "Mostrando logs de tipo $tipo_log..."
+            case $tipo_log in
+                "error") tail -n 1000 /var/log/syslog | grep -i "dhcp" | grep -i "error" ;;
+                "warning") tail -n 1000 /var/log/syslog | grep -i "dhcp" | grep -i "warning" ;;
+                "info") tail -n 1000 /var/log/syslog | grep -i "dhcp" | grep -i "info" ;;
+                *) echo "Tipo de log inválido. Use: error, warning o info" ;;
+            esac
+            ;;
+        4)
+            read -p "Número de logs a mostrar: " num_logs
+            echo "Mostrando últimos $num_logs logs..."
+            journalctl -u isc-dhcp-server -n "$num_logs"
+            ;;
+        *) echo "Opción inválida" ;;
+    esac
+}
+
 consultar_logs() {
     case $1 in
-        --recientes) journalctl -u isc-dhcp-server --since "1 hour ago" ;;
-        --fecha) shift; journalctl -u isc-dhcp-server --since "$1 00:00:00" --until "$2 23:59:59" ;;
-        --tipo) shift; journalctl -u isc-dhcp-server | grep -i "$1" ;;
-        --ultimos) shift; journalctl -u isc-dhcp-server -n "$1" ;;
-        *) echo "Uso: $0 logs {--recientes | --fecha DD-MM-YYYY [DD-MM-YYYY] | --tipo error/warning/info | --ultimos N}" ;;
+        --recientes)
+            echo "Mostrando logs recientes..."
+            journalctl -u isc-dhcp-server --since "1 hour ago"
+            ;;
+        --fecha)
+            shift
+            if [ -z "$2" ]; then
+                echo "Mostrando logs desde $1..."
+                journalctl -u isc-dhcp-server --since "$1 00:00:00"
+            else
+                echo "Mostrando logs entre $1 y $2..."
+                journalctl -u isc-dhcp-server --since "$1 00:00:00" --until "$2 23:59:59"
+            fi
+            ;;
+        --tipo)
+            shift
+            echo "Mostrando logs de tipo $1..."
+            tail -n 1000 /var/log/syslog | grep -i "dhcp" | grep -i "$1"
+            ;;
+        --ultimos)
+            shift
+            echo "Mostrando últimos $1 logs..."
+            journalctl -u isc-dhcp-server -n "$1"
+            ;;
+        *)
+            echo "Uso: $0 logs {--recientes | --fecha YYYY-MM-DD [YYYY-MM-DD] | --tipo error/warning/info | --ultimos N}"
+            ;;
     esac
 }
 
@@ -124,11 +212,48 @@ instalar_ansible() {
 }
 
 instalar_docker() {
+    
     sudo apt update && sudo apt install -y docker.io
+
+    
     sudo systemctl start docker
     sudo systemctl enable docker
-    docker build -t dhcp-server .
-    docker run -d --name dhcp -p 67:67/udp dhcp-server
+
+    
+    if ! sudo systemctl is-active --quiet docker; then
+        echo " Error: Docker no se está ejecutando. Verifica la instalación."
+        exit 1
+    fi
+
+    
+    if [ -d "/home/loma/Documentos/GitHub/DHCP/docker-dhcp/" ]; then
+        sudo docker build -t dhcp-server /home/loma/Documentos/GitHub/DHCP/docker-dhcp/
+    else
+        echo " Error: La ruta /home/loma/Documentos/GitHub/DHCP/docker-dhcp/ no existe."
+        exit 1
+    fi
+
+    
+    if ! sudo docker images | grep -q "dhcp-server"; then
+        echo "❌ Error: La imagen dhcp-server no se creó correctamente."
+        exit 1
+    fi
+
+    
+    if sudo docker ps -a --format '{{.Names}}' | grep -q "^dhcp$"; then
+        sudo docker stop dhcp
+        sudo docker rm dhcp
+    fi
+
+    
+    sudo docker run -d --name dhcp -p 6767:6767/udp dhcp-server
+
+    
+    if ! sudo docker ps --format '{{.Names}}' | grep -q "^dhcp$"; then
+        echo "❌ Error: El contenedor DHCP no se inició correctamente."
+        exit 1
+    fi
+
     echo "Servicio DHCP instalado correctamente con Docker."
 }
 
@@ -148,9 +273,7 @@ desinstalar_docker() {
     sudo docker stop dhcp
     sudo docker rm dhcp
     sudo docker rmi dhcp-server
-    sudo apt remove --purge -y docker.io
-    sudo apt autoremove -y
-    echo "Docker ha sido desinstalado correctamente."
+    echo "Servicio DHCP en Docker ha sido eliminado"
 }
 
 configurar_dhcp() {
@@ -176,34 +299,49 @@ EOL
     sudo systemctl restart isc-dhcp-server
 }
 
-mostrar_info
+configurar_netplan() {
+    echo "Configuración de Netplan:"
+    echo "Ejemplo de configuración:"
+    echo "network:"
+    echo "  version: 2"
+    echo "  ethernets:"
+    echo "    eth0:"
+    echo "      dhcp4: no"
+    echo "      addresses:"
+    echo "        - 192.168.1.10/24"
+    echo "      gateway4: 192.168.1.1"
+    echo "      nameservers:"
+    echo "        addresses:"
+    echo "          - 8.8.8.8"
+    echo "          - 8.8.4.4"
 
-if [ $# -gt 0 ]; then
-    case $1 in
-        instalar)
-            shift
-            seleccionar_instalacion "$@"
-            ;;
-        desinstalar)
-            shift
-            seleccionar_desinstalacion "$@"
-            ;;
-        servicio)
-            shift
-            gestionar_servicio "$@"
-            ;;
-        logs)
-            shift
-            consultar_logs "$@"
-            ;;
-        configurar_dhcp)
-            configurar_dhcp
-            ;;
-        *)
-            echo "Uso: $0 {instalar [docker|ansible|apt] | desinstalar [docker|ansible|apt] | servicio start|stop|restart|status | logs --recientes|--fecha YYYY-MM-DD|--tipo error|--ultimos N | configurar_dhcp}"
-            ;;
-    esac
-    exit 0
-fi
+    read -p "¿Deseas configurar manualmente (s/n)? " respuesta
+    if [[ $respuesta =~ ^[Ss]$ ]]; then
+        read -p "Introduce el nombre de la interfaz (ej: eth0): " interfaz
+        read -p "Introduce la dirección IP (ej: 192.168.1.10/24): " ip
+        read -p "Introduce la puerta de enlace (ej: 192.168.1.1): " gateway
+        read -p "Introduce los servidores DNS separados por comas (ej: 8.8.8.8,8.8.4.4): " dns
+
+        sudo bash -c "cat > /etc/netplan/01-netcfg.yaml" <<EOL
+network:
+  version: 2
+  ethernets:
+    $interfaz:
+      dhcp4: no
+      addresses:
+        - $ip
+      gateway4: $gateway
+      nameservers:
+        addresses: [$dns]
+EOL
+
+        echo "Configuración de Netplan guardada. Aplicando cambios..."
+        sudo netplan apply
+        echo "Cambios aplicados correctamente."
+    else
+        echo "Configuración de Netplan cancelada."
+    fi
+}
+
 
 menu
