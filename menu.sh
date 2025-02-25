@@ -7,6 +7,7 @@ menu() {
     	echo "Interfaz de red: $(ip -o -4 route show default | cut -d' ' -f5)"
     	echo "Estado del servicio DHCP: $(systemctl is-active isc-dhcp-server)"
     	echo "============================================="
+
         echo "========== Menú de Gestión DHCP =========="
         echo "1. Instalar servicio"
         echo "2. Desinstalar servicio"
@@ -195,7 +196,10 @@ consultar_logs() {
             journalctl -u isc-dhcp-server -n "$1"
             ;;
         *)
-            echo "Uso: $0 logs {--recientes | --fecha YYYY-MM-DD [YYYY-MM-DD] | --tipo error/warning/info | --ultimos N}"
+            echo "Uso: $0 logs {--recientes 
+            | --fecha YYYY-MM-DD [YYYY-MM-DD] 
+            | --tipo error/warning/info 
+            | --ultimos N}"
             ;;
     esac
 }
@@ -206,8 +210,12 @@ instalar_dhcp() {
 }
 
 instalar_ansible() {
+    read -p "Ingrese la IP del servidor donde instalar DHCP: " SERVER_IP
+    read -p "Ingrese el usuario SSH del servidor: " SERVER_USER
     sudo apt update && sudo apt install ansible -y
-    ansible-playbook -i localhost, ./ansible-dhcp/install_dhcp.yml
+    echo "[dhcp_servers]" > hosts.ini
+    echo "$SERVER_IP ansible_user=$SERVER_USER ansible_ssh_private_key_file=~/.ssh/id_rsa" >> hosts.ini
+    ansible-playbook -i hosts.ini ./ansible-dhcp/install_dhcp.yml --ask-become-pass
     echo "Servicio DHCP instalado correctamente con Ansible."
 }
 
@@ -215,27 +223,18 @@ instalar_docker() {
     
     sudo apt update && sudo apt install -y docker.io
 
-    
     sudo systemctl start docker
     sudo systemctl enable docker
 
-    
     if ! sudo systemctl is-active --quiet docker; then
         echo " Error: Docker no se está ejecutando. Verifica la instalación."
         exit 1
     fi
-
-    
-    if [ -d "/home/loma/Documentos/GitHub/DHCP/docker-dhcp/" ]; then
-        sudo docker build -t dhcp-server /home/loma/Documentos/GitHub/DHCP/docker-dhcp/
-    else
-        echo " Error: La ruta /home/loma/Documentos/GitHub/DHCP/docker-dhcp/ no existe."
-        exit 1
-    fi
-
+ 
+    sudo docker build -t dhcp-server /home/loma/Documentos/GitHub/DHCP/docker-dhcp/
     
     if ! sudo docker images | grep -q "dhcp-server"; then
-        echo "❌ Error: La imagen dhcp-server no se creó correctamente."
+        echo "Error: La imagen dhcp-server no se creó correctamente."
         exit 1
     fi
 
@@ -250,7 +249,7 @@ instalar_docker() {
 
     
     if ! sudo docker ps --format '{{.Names}}' | grep -q "^dhcp$"; then
-        echo "❌ Error: El contenedor DHCP no se inició correctamente."
+        echo "Error: El contenedor DHCP no se inició correctamente."
         exit 1
     fi
 
@@ -277,12 +276,12 @@ desinstalar_docker() {
 }
 
 configurar_dhcp() {
-    read -p "Introduce la subred: " subred
-    read -p "Introduce la máscara de subred: " mascara
-    read -p "Introduce el rango inicial: " rango_inicio
-    read -p "Introduce el rango final: " rango_fin
-    read -p "Introduce la puerta de enlace: " puerta_enlace
-    read -p "Introduce el servidor DNS: " dns
+    read -p "Introduce la subred (ej: 192.168.1.0): " subred
+    read -p "Introduce la máscara de subred (ej: 255.255.255.0): " mascara
+    read -p "Introduce el rango inicial (ej: 192.168.1.100): " rango_inicio
+    read -p "Introduce el rango final (ej: 192.168.1.200): " rango_fin
+    read -p "Introduce la puerta de enlace (ej: 192.168.1.1): " puerta_enlace
+    read -p "Introduce el servidor DNS (ej: 8.8.8.8,8.8.4.4): " dns
 
     sudo bash -c "cat > /etc/dhcp/dhcpd.conf" <<EOL
 default-lease-time 600;
@@ -300,24 +299,8 @@ EOL
 }
 
 configurar_netplan() {
-    echo "Configuración de Netplan:"
-    echo "Ejemplo de configuración:"
-    echo "network:"
-    echo "  version: 2"
-    echo "  ethernets:"
-    echo "    eth0:"
-    echo "      dhcp4: no"
-    echo "      addresses:"
-    echo "        - 192.168.1.10/24"
-    echo "      gateway4: 192.168.1.1"
-    echo "      nameservers:"
-    echo "        addresses:"
-    echo "          - 8.8.8.8"
-    echo "          - 8.8.4.4"
-
-    read -p "¿Deseas configurar manualmente (s/n)? " respuesta
-    if [[ $respuesta =~ ^[Ss]$ ]]; then
-        read -p "Introduce el nombre de la interfaz (ej: eth0): " interfaz
+    
+        read -p "Introduce el nombre de la interfaz (ej: enp0s3): " interfaz
         read -p "Introduce la dirección IP (ej: 192.168.1.10/24): " ip
         read -p "Introduce la puerta de enlace (ej: 192.168.1.1): " gateway
         read -p "Introduce los servidores DNS separados por comas (ej: 8.8.8.8,8.8.4.4): " dns
@@ -338,9 +321,7 @@ EOL
         echo "Configuración de Netplan guardada. Aplicando cambios..."
         sudo netplan apply
         echo "Cambios aplicados correctamente."
-    else
-        echo "Configuración de Netplan cancelada."
-    fi
+    
 }
 
 
