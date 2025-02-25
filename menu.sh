@@ -231,7 +231,7 @@ instalar_docker() {
         exit 1
     fi
  
-    sudo docker build -t dhcp-server /home/loma/Documentos/GitHub/DHCP/docker-dhcp/
+    sudo docker build -t dhcp-server ./docker-dhcp/
     
     if ! sudo docker images | grep -q "dhcp-server"; then
         echo "Error: La imagen dhcp-server no se creó correctamente."
@@ -245,7 +245,7 @@ instalar_docker() {
     fi
 
     
-    sudo docker run -d --name dhcp -p 6767:6767/udp dhcp-server
+    sudo docker run -d --name dhcp --dns=8.8.8.8 -p 6767:6767/udp dhcp-server
 
     
     if ! sudo docker ps --format '{{.Names}}' | grep -q "^dhcp$"; then
