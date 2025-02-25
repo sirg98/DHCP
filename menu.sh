@@ -1,5 +1,29 @@
 #!/bin/bash
 
+ayuda() {
+    echo "=================================== AYUDA DEL SCRIPT DHCP ==================================="
+    echo "Uso: $0 [OPCIÓN]"
+    echo ""
+    echo "--------------------------- Opciones disponibles: -------------------------------------------"
+    echo "  activar                        - Iniciar el servicio DHCP"
+    echo "  apagar                         - Detener el servicio DHCP"
+    echo "  reiniciar                      - Reiniciar el servicio DHCP"
+    echo "  estado                         - Mostrar estado del servicio DHCP"
+    echo "  --logs recientes               - Mostrar logs de la última hora"
+    echo "  --logs fecha YYYY-MM-DD        - Mostrar logs por fecha o rango de fechas"
+    echo "  --logs tipo error|warning|info - Mostrar logs por tipo"
+    echo "  --logs ultimos N               - Mostrar últimos N logs"
+    echo "  instalar docker|ansible|apt    - Instalar servicio usando el método especificado"
+    echo "  desinstalar docker|ansible|apt - Desinstalar servicio usando el método especificado"
+    echo "  configurar DHCP                - edita el archivo dhcpd.conf"
+    echo "  configurar netplan             - configura la interfaces de red del archivo netplan"
+    echo "  Permisos Netplan               - da los permisos necesarios y guarda la config de netplan"
+    echo "  ayuda                          - Mostrar esta ayuda"
+    echo "  salir                          - Rompe el bucle y sale del menu"
+    echo "  Sin argumentos ejecuta el menú interactivo"
+    echo "=============================================================================================="
+}
+
 menu() {
     while true; do
     	echo "========== Información del sistema =========="
@@ -8,7 +32,7 @@ menu() {
     	echo "Estado del servicio DHCP: $(systemctl is-active isc-dhcp-server)"
     	echo "============================================="
 
-        echo "========== Menú de Gestión DHCP =========="
+        echo "========== Menú de Gestión DHCP ============="
         echo "1. Instalar servicio"
         echo "2. Desinstalar servicio"
         echo "3. Mostrar estado del servicio"
@@ -19,8 +43,9 @@ menu() {
         echo "8. Configurar DHCP"
         echo "9. Configurar Netplan"
         echo "10. Permisos NetPlan"
-        echo "11. Salir"
-        echo "=========================================="
+        echo "11. Ayuda"
+        echo "12. Salir"
+        echo "============================================"
         read -p "Selecciona una opción: " opcion
 
         case $opcion in
@@ -34,7 +59,8 @@ menu() {
             8) configurar_dhcp ;;
             9) configurar_netplan ;;
             10) sudo chmod 644 /etc/netplan/*.yaml && echo "Permisos aplicados correctamente"  ;;
-            11) exit ;;
+            11) ayuda ;;
+            12) exit ;;
             *) echo "Opción inválida";;
         esac
     done
@@ -171,11 +197,11 @@ consultar_logs_interactivo() {
 
 consultar_logs() {
     case $1 in
-        --recientes)
+        recientes)
             echo "Mostrando logs recientes..."
             journalctl -u isc-dhcp-server --since "1 hour ago"
             ;;
-        --fecha)
+        fecha)
             shift
             if [ -z "$2" ]; then
                 echo "Mostrando logs desde $1..."
@@ -185,21 +211,21 @@ consultar_logs() {
                 journalctl -u isc-dhcp-server --since "$1 00:00:00" --until "$2 23:59:59"
             fi
             ;;
-        --tipo)
+        tipo)
             shift
             echo "Mostrando logs de tipo $1..."
             tail -n 1000 /var/log/syslog | grep -i "dhcp" | grep -i "$1"
             ;;
-        --ultimos)
+        ultimos)
             shift
             echo "Mostrando últimos $1 logs..."
             journalctl -u isc-dhcp-server -n "$1"
             ;;
         *)
-            echo "Uso: $0 logs {--recientes 
-            | --fecha YYYY-MM-DD [YYYY-MM-DD] 
-            | --tipo error/warning/info 
-            | --ultimos N}"
+            echo "Uso: $0 --logs {recientes 
+            | fecha YYYY-MM-DD [YYYY-MM-DD] 
+            | tipo error/warning/info 
+            | ultimos N}"
             ;;
     esac
 }
@@ -324,5 +350,32 @@ EOL
     
 }
 
-
-menu
+# Verifica si hay argumentos
+if [ $# -gt 0 ]; then
+    case $1 in
+        activar|apagar|reiniciar|estado)
+            gestionar_servicio $1
+            ;;
+        --logs)
+            shift
+            consultar_logs $@
+            ;;
+        instalar)
+            shift
+            seleccionar_instalacion $1
+            ;;
+        desinstalar)
+            shift
+            seleccionar_desinstalacion $1
+            ;;
+        ayuda)
+            ayuda
+            ;;
+        *)
+            echo "Opción desconocida: $1"
+            help
+            ;;
+    esac
+else
+    menu
+fi
